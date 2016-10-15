@@ -6,7 +6,7 @@ import ReactNativeAD from './ReactNativeAD.js'
 import Timer from 'react-timer-mixin'
 import log from './logger'
 
-const loginUrl = 'https://login.microsoftonline.com/<tenant id>/oauth2/authorize'
+const loginUrl = 'https://login.microsoftonline.com/<tenant id>/oauth2/v2.0/authorize'
 const tokenUrl = 'https://login.microsoftonline.com/common/oauth2/token'
 
 export default class ADLoginView extends React.Component {
@@ -79,7 +79,8 @@ export default class ADLoginView extends React.Component {
             flex:1,
             alignSelf : 'stretch',
             width : Dimensions.get('window').width,
-            height : Dimensions.get('window').height
+            height : Dimensions.get('window').height,
+            opacity: this.state.visible ? 100 : 0
           }]}
           source={{uri: this.state.page}}
           javaScriptEnabled={true}
@@ -117,7 +118,7 @@ export default class ADLoginView extends React.Component {
 
     if(context !== null) {
       let result = `${authUrl}?response_type=code` +
-             `&client_id=${context.getConfig().client_id}` +
+             `&client_id=${context.getConfig().client_id}&scope=profile+email+openid+offline_access+https://outlook.office.com/Mail.Read+https://outlook.office.com/Contacts.Read` +
              (redirect ? `&redirect_url=${context.getConfig().redirect_uri}&nonce=rnad-${Date.now()}` : '')
       if(this._needRedirect)
         result = `https://login.windows.net/${this.props.context.getConfig().client_id}/oauth2/logout`
@@ -151,11 +152,12 @@ export default class ADLoginView extends React.Component {
       this._lock = true
       log.verbose('ADLoginView._handleADToken code=', code[0])
       code = String(code[0]).replace(/(\?|\&)?code\=/,'')
-      this.setState({visible : !this.props.hideAfterLogin})
+      this.setState({visible : false})
       this.props.onVisibilityChange && this.props.onVisibilityChange(false)
-      this._getResourceAccessToken(code).catch((err) => {
-        log.error('ADLoginView._getResourceAccessToken', err)
-      })
+      let onSuccess = this.props.onSuccess;
+      if (typeof this.props.onSuccess === 'function') {
+        onSuccess(code)
+      }
       return true
     }
 
@@ -174,67 +176,6 @@ export default class ADLoginView extends React.Component {
         throw new Error(`ReactNativeAD config object must have \`${prop}\` property`)
     })
 
-  }
-
-  /**
-   * Get access token for each resoureces
-   * @param {string} code The authorization code from `onNavigationStateChange`
-   *                      callback.
-   * @return {Promise<void>}
-   */
-  _getResourceAccessToken(code:string):Promise {
-
-    let context = this.props.context
-
-    if(!context)
-      throw new Error('property `context` of ADLoginView should not be null/undefined')
-
-    let adConfig:ADConfig = this.props.context.getConfig()
-
-    let {client_id=null, redirect_uri=null, client_secret=null, resources=null} = adConfig
-    // Transform resource string to array
-    if( typeof resources === 'string')
-      resources = [resources]
-    else if(Array.isArray(resources))
-      resources = resources.length === 0 ? null : resources
-
-    log.verbose('ADLoginView get access token for resources=', resources)
-
-    let promises:Array<Promise> = []
-    let config = { client_id, redirect_uri, code, client_secret,
-      // set resource to common by default
-      resource : 'common'
-    }
-
-    if(resources === null || resources === void 0)
-    {
-      promises.push(this.context.grantAccessToken(CONST.GRANT_TYPE.AUTHORIZATION_CODE, config))
-    }
-    // Get access_token for each resource
-    else {
-      promises = resources.map( (rcs, i) => {
-        let cfg = Object.assign({}, config, {resource : rcs})
-        return context.grantAccessToken(CONST.GRANT_TYPE.AUTHORIZATION_CODE , cfg)
-      })
-    }
-    return Promise.all(promises).then((resps:Array<GrantTokenResp>) => {
-
-      log.verbose('ADLoginView response access info ', resps)
-
-      if(!this.props.context)
-        throw new Error('value of property `context` is invalid=', this.props.context)
-
-      let context = this.props.context
-      let onSuccess = this.props.onSuccess || function(){}
-
-      // trigger loggined finished event
-      if(context !== null && typeof this.props.onSuccess === 'function')
-        onSuccess(context.getCredentials())
-      this._lock = false
-
-    }).catch((err) => {
-      throw new Error('Failed to acquire token for resources', err.stack)
-    })
   }
 
 }
