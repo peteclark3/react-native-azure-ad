@@ -12,7 +12,7 @@ const tokenUrl = 'https://login.microsoftonline.com/common/oauth2/token'
 export default class ADLoginView extends React.Component {
 
   props : {
-    onSuccess? : ?Function,
+    onSuccess : Function,
     needLogout? : bool,
     style : any,
     onURLChange : Function,
@@ -155,8 +155,8 @@ export default class ADLoginView extends React.Component {
       this.setState({visible : false})
       this.props.onVisibilityChange && this.props.onVisibilityChange(false)
       let onSuccess = this.props.onSuccess;
-      if (typeof this.props.onSuccess === 'function') {
-        onSuccess(code)
+      if (onSuccess != null && typeof this.props.onSuccess === 'function') {
+        onSuccess(code);
       }
       return true
     }
